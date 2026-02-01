@@ -1,0 +1,60 @@
+[tool.poetry]
+name = "taric-match"
+version = "0.1.0"
+description = "EU TARIC customs tariff query tool"
+authors = ["Leo <leo@example.com>"]
+license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/yourusername/taric-match"
+repository = "https://github.com/yourusername/taric-match"
+documentation = "https://github.com/yourusername/taric-match#readme"
+keywords = ["taric", "customs", "tariff", "eu", "import", "export"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+packages = [
+    { include = "taric_match" },
+    { include = "tests" },
+]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+requests = "^2.31.0"
+click = "^8.1.7"
+rich = "^13.7.0"
+pandas = "^2.1.0"
+python-dotenv = "^1.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+pytest-cov = "^4.1.0"
+black = "^23.11.0"
+isort = "^5.12.0"
+mypy = "^1.7.0"
+pre-commit = "^3.6.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 100
+target-version = ["py39"]
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
