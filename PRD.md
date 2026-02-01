@@ -13,34 +13,59 @@
 
 ## 2. API 对接
 
-### 2.1 EU TARIC Web Services
+### 2.1 EU TARIC Web Services (新版)
+
+**WSDL**: https://ec.europa.eu/taxation_customs/dds2/taric/services/goods?wsdl
+
+**限制**: 每秒最多 100 次请求
 
 | 接口 | 功能 |
 |------|------|
 | `goodsDescrForWs` | 获取商品描述 |
 | `goodsMeasForWs` | 获取关税措施列表 |
 
-### 2.2 goodsMeasForWs 返回字段
+### 2.2 goodsDescrForWs 输入/输出
 
-```
-输入:
-- Goods code: 商品编码 (4-10位)
-- Country Code: 国家代码 (可选，默认 EU)
-- Reference Date: 参考日期 (可选，默认当前)
-- Trade Movement: 贸易方向 I/E/IE (可选)
+**输入参数**:
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| goodsCode | string | ✅ | 商品编码 (4-10位) |
+| languageCode | string | ✅ | 语言代码 (EN, ZH, FR, DE...) |
+| referenceDate | date | ❌ | 参考日期，默认当前 |
 
-输出:
-- Goods_code: 商品编码
-- Country_code: 国家代码
-- Reference_date: 参考日期
-- Trade_movement: 贸易方向
-- List of measures:
-  ├─ Measure type: 措施类型 (关税/管制/限制等)
-  ├─ Duty rate: 税率/金额
-  ├─ Additional code: 附加代码
-  ├─ Validity period: 有效期
-  └─ Regulation id: 法规编号
-```
+**输出字段**:
+| 字段 | 说明 |
+|------|------|
+| goodsCode | 商品编码 |
+| languageCode | 语言代码 |
+| referenceDate | 参考日期 |
+| description | 商品描述 (前缀 `[EN]` 表示英文翻译) |
+
+### 2.3 goodsMeasForWs 输入/输出
+
+**输入参数**:
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| goodsCode | string | ✅ | 商品编码 (4-10位) |
+| countryCode | string | ✅ | 国家代码 (ISO 2位) |
+| referenceDate | date | ❌ | 参考日期，默认当前 |
+| tradeMovement | string | ❌ | 贸易方向 (I/E/IE)，默认 I |
+
+**输出字段**:
+| 字段 | 说明 |
+|------|------|
+| goodsCode | 商品编码 |
+| countryCode | 国家代码 |
+| referenceDate | 参考日期 |
+| tradeMovement | 贸易方向 |
+| goodsDescription | 商品描述 |
+| measureList[].measureType | 措施类型 |
+| measureList[].measureTypeDescription | 措施类型描述 |
+| measureList[].dutyRate | 税率/金额 |
+| measureList[].additionalCode | 附加代码 |
+| measureList[].validityStartDate | 有效期开始 |
+| measureList[].validityEndDate | 有效期结束 |
+| measureList[].regulationId | 法规编号 |
 
 ---
 
