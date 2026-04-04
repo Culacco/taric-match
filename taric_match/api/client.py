@@ -38,6 +38,26 @@ def _find_text(element: ET.Element, tag: str) -> str:
     return fallback or ""
 
 
+def _find_child(element: ET.Element, tag: str) -> Optional[ET.Element]:
+    return element.find(f".//{{*}}{tag}") or element.find(f".//{tag}")
+
+
+def _normalize_goods_code(goods_code: str) -> str:
+    value = "".join(ch for ch in goods_code.strip() if ch.isdigit())
+    if not value:
+        raise TaricAPIError("商品编码不能为空，且必须包含数字。")
+    if len(value) > 10:
+        raise TaricAPIError("商品编码长度不能超过 10 位。")
+    return value.ljust(10, "0")
+
+
+def _normalize_language_code(language_code: str) -> str:
+    value = language_code.strip().lower()
+    if len(value) != 2 or not value.isalpha():
+        raise TaricAPIError("语言代码必须是 2 位字母，例如 en、zh、fr。")
+    return value
+
+
 @dataclass
 class GoodsDescription:
     """商品描述响应。"""
@@ -108,6 +128,10 @@ class TaricClient:
     WSDL_URL = "https://ec.europa.eu/taxation_customs/dds2/taric/services/goods?wsdl"
     SERVICE_URL = "https://ec.europa.eu/taxation_customs/dds2/taric/services/goods"
     BASE_URL = SERVICE_URL
+    DEFAULT_HEADERS = {
+        "User-Agent": "curl/8.7.1",
+        "Accept": "text/xml,application/xml;q=0.9,*/*;q=0.8",
+    }
 
     def __init__(
         self,
@@ -131,6 +155,7 @@ class TaricClient:
             "Content-Type": "text/xml; charset=utf-8",
             "SOAPAction": "",
         }
+        headers.update(self.DEFAULT_HEADERS)
 
         try:
             response = requests.post(
@@ -164,16 +189,35 @@ class TaricClient:
         if return_elem is None:
             return None
 
-        description = _find_text(return_elem, "description")
+        result_elem = _find_child(return_elem, "result")
+        if result_elem is not None:
+            request_elem = _find_child(result_elem, "request")
+            data_elem = _find_child(result_elem, "data")
+            goods_code = _find_text(request_elem, "goods_code") if request_elem is not None else ""
+            language_code = (
+                _find_text(request_elem, "language_code") if request_elem is not None else ""
+            )
+            reference_date = (
+                _parse_date(_find_text(request_elem, "reference_date"))
+                if request_elem is not None
+                else date.today()
+            )
+            description = _find_text(data_elem, "description") if data_elem is not None else ""
+        else:
+            goods_code = _find_text(return_elem, "goodsCode")
+            language_code = _find_text(return_elem, "languageCode")
+            reference_date = _parse_date(_find_text(return_elem, "referenceDate"))
+            description = _find_text(return_elem, "description")
+
         original_language = None
         if description.startswith("[EN] "):
             original_language = "EN"
             description = description[5:]
 
         return GoodsDescription(
-            goods_code=_find_text(return_elem, "goodsCode"),
-            language_code=_find_text(return_elem, "languageCode"),
-            reference_date=_parse_date(_find_text(return_elem, "referenceDate")),
+            goods_code=goods_code,
+            language_code=language_code,
+            reference_date=reference_date,
             description=description,
             original_language=original_language,
         )
@@ -184,27 +228,58 @@ class TaricClient:
         if return_elem is None:
             return None
 
+        result_elem = _find_child(return_elem, "result")
+        if result_elem is not None:
+            request_elem = _find_child(result_elem, "request")
+            measures_container = _find_child(result_elem, "measures")
+            goods_code = _find_text(request_elem, "goods_code") if request_elem is not None else ""
+            country_code = (
+                _find_text(request_elem, "country_code") if request_elem is not None else ""
+            )
+            reference_date = (
+                _parse_date(_find_text(request_elem, "reference_date"))
+                if request_elem is not None
+                else date.today()
+            )
+            trade_movement = (
+                _find_text(request_elem, "trade_movement") if request_elem is not None else ""
+            )
+            description = None
+        else:
+            measures_container = _find_child(return_elem, "measureList")
+            goods_code = _find_text(return_elem, "goodsCode")
+            country_code = _find_text(return_elem, "countryCode")
+            reference_date = _parse_date(_find_text(return_elem, "referenceDate"))
+            trade_movement = _find_text(return_elem, "tradeMovement")
+            description = _find_text(return_elem, "goodsDescription") or None
+
         measures: List[Measure] = []
-        measures_list = return_elem.find(".//{*}measureList") or return_elem.find(".//measureList")
-        if measures_list is not None:
-            for measure_elem in measures_list.findall(".//{*}measure") or measures_list.findall(
-                ".//measure"
-            ):
+        if measures_container is not None:
+            for measure_elem in measures_container.findall(
+                ".//{*}measure"
+            ) or measures_container.findall(".//measure"):
                 parsed = self._parse_measure_element(measure_elem)
                 if parsed is not None:
                     measures.append(parsed)
 
         return GoodsMeasures(
-            goods_code=_find_text(return_elem, "goodsCode"),
-            country_code=_find_text(return_elem, "countryCode"),
-            reference_date=_parse_date(_find_text(return_elem, "referenceDate")),
-            trade_movement=_find_text(return_elem, "tradeMovement"),
+            goods_code=goods_code,
+            country_code=country_code,
+            reference_date=reference_date,
+            trade_movement=trade_movement,
             measures=measures,
-            description=_find_text(return_elem, "goodsDescription") or None,
+            description=description,
         )
 
     def _parse_measure_element(self, element: ET.Element) -> Optional[Measure]:
-        measure_type = _find_text(element, "measureType")
+        measure_type_elem = _find_child(element, "measure_type")
+        if measure_type_elem is not None:
+            measure_type = _find_text(measure_type_elem, "measure_type")
+            measure_type_description = _find_text(measure_type_elem, "description")
+        else:
+            measure_type = _find_text(element, "measureType")
+            measure_type_description = _find_text(element, "measureTypeDescription")
+
         if not measure_type:
             return None
 
@@ -221,14 +296,24 @@ class TaricClient:
 
         return Measure(
             measure_type=measure_type,
-            measure_type_description=_find_text(element, "measureTypeDescription"),
+            measure_type_description=measure_type_description,
             duty_rate=_find_text(element, "dutyRate") or None,
             additional_code=additional_code,
-            validity_start_date=_find_text(element, "validityStartDate") or None,
-            validity_end_date=_find_text(element, "validityEndDate") or None,
-            regulation_id=_find_text(element, "regulationId") or None,
-            regulation_url=_find_text(element, "regulationUrl") or None,
-            order_number=_find_text(element, "orderNumber") or None,
+            validity_start_date=_find_text(element, "validityStartDate")
+            or _find_text(element, "validity_start_date")
+            or None,
+            validity_end_date=_find_text(element, "validityEndDate")
+            or _find_text(element, "validity_end_date")
+            or None,
+            regulation_id=_find_text(element, "regulationId")
+            or _find_text(element, "regulation_id")
+            or None,
+            regulation_url=_find_text(element, "regulationUrl")
+            or _find_text(element, "regulation_url")
+            or None,
+            order_number=_find_text(element, "orderNumber")
+            or _find_text(element, "order_number")
+            or None,
         )
 
     def _maybe_fallback_description(
@@ -261,14 +346,16 @@ class TaricClient:
         if self.use_mock:
             return self._mock_description(goods_code, language_code)
 
+        normalized_goods_code = _normalize_goods_code(goods_code)
+        normalized_language_code = _normalize_language_code(language_code)
         ref_date = reference_date or date.today()
         soap_body = f"""<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns="http://goodsNomenclatureForWS.ws.taric.dds.s/">
   <soapenv:Body>
     <ns:goodsDescrForWs>
-      <goodsCode>{goods_code}</goodsCode>
-      <languageCode>{language_code.upper()}</languageCode>
-      <referenceDate>{ref_date.strftime('%Y-%m-%d')}</referenceDate>
+      <ns:goodsCode>{normalized_goods_code}</ns:goodsCode>
+      <ns:languageCode>{normalized_language_code}</ns:languageCode>
+      <ns:referenceDate>{ref_date.strftime('%Y-%m-%d')}</ns:referenceDate>
     </ns:goodsDescrForWs>
   </soapenv:Body>
 </soapenv:Envelope>"""
@@ -277,7 +364,7 @@ class TaricClient:
             response = self._make_soap_request(soap_body)
             result = self._parse_description_response(response)
             if result is None:
-                raise TaricAPIError(f"TARIC 未返回商品编码 {goods_code} 的描述数据。")
+                raise TaricAPIError(f"TARIC 未返回商品编码 {normalized_goods_code} 的描述数据。")
             return result
         except TaricAPIError as exc:
             return self._maybe_fallback_description(exc, goods_code, language_code)
@@ -292,15 +379,16 @@ class TaricClient:
         if self.use_mock:
             return self._mock_measures(goods_code, country_code, trade_movement)
 
+        normalized_goods_code = _normalize_goods_code(goods_code)
         ref_date = reference_date or date.today()
         soap_body = f"""<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns="http://goodsNomenclatureForWS.ws.taric.dds.s/">
   <soapenv:Body>
     <ns:goodsMeasForWs>
-      <goodsCode>{goods_code}</goodsCode>
-      <countryCode>{country_code.upper()}</countryCode>
-      <referenceDate>{ref_date.strftime('%Y-%m-%d')}</referenceDate>
-      <tradeMovement>{trade_movement.upper()}</tradeMovement>
+      <ns:goodsCode>{normalized_goods_code}</ns:goodsCode>
+      <ns:countryCode>{country_code.upper()}</ns:countryCode>
+      <ns:referenceDate>{ref_date.strftime('%Y-%m-%d')}</ns:referenceDate>
+      <ns:tradeMovement>{trade_movement.upper()}</ns:tradeMovement>
     </ns:goodsMeasForWs>
   </soapenv:Body>
 </soapenv:Envelope>"""
@@ -309,7 +397,9 @@ class TaricClient:
             response = self._make_soap_request(soap_body)
             result = self._parse_measures_response(response)
             if result is None:
-                raise TaricAPIError(f"TARIC 未返回商品编码 {goods_code} 的关税措施数据。")
+                raise TaricAPIError(
+                    f"TARIC 未返回商品编码 {normalized_goods_code} 的关税措施数据。"
+                )
             return result
         except TaricAPIError as exc:
             return self._maybe_fallback_measures(exc, goods_code, country_code, trade_movement)

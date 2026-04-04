@@ -11,8 +11,8 @@ DESCRIPTION_XML = """<?xml version="1.0" encoding="UTF-8"?>
   <soapenv:Body>
     <ns2:goodsDescrForWsResponse xmlns:ns2="http://goodsNomenclatureForWS.ws.taric.dds.s/">
       <return>
-        <goodsCode>87032319</goodsCode>
-        <languageCode>ZH</languageCode>
+        <goodsCode>8703231900</goodsCode>
+        <languageCode>zh</languageCode>
         <referenceDate>2024-01-15</referenceDate>
         <description>[EN] Motor vehicles</description>
       </return>
@@ -27,7 +27,7 @@ MEASURES_XML = """<?xml version="1.0" encoding="UTF-8"?>
   <soapenv:Body>
     <ns2:goodsMeasForWsResponse xmlns:ns2="http://goodsNomenclatureForWS.ws.taric.dds.s/">
       <return>
-        <goodsCode>87032319</goodsCode>
+        <goodsCode>8703231900</goodsCode>
         <countryCode>CN</countryCode>
         <referenceDate>2024-01-15</referenceDate>
         <tradeMovement>I</tradeMovement>
@@ -100,8 +100,8 @@ def test_parse_description_response() -> None:
     client = TaricClient(use_mock=False)
     result = client._parse_description_response(DESCRIPTION_XML)
     assert result is not None
-    assert result.goods_code == "87032319"
-    assert result.language_code == "ZH"
+    assert result.goods_code == "8703231900"
+    assert result.language_code == "zh"
     assert result.reference_date == date(2024, 1, 15)
     assert result.description == "Motor vehicles"
     assert result.original_language == "EN"
@@ -111,7 +111,7 @@ def test_parse_measures_response() -> None:
     client = TaricClient(use_mock=False)
     result = client._parse_measures_response(MEASURES_XML)
     assert result is not None
-    assert result.goods_code == "87032319"
+    assert result.goods_code == "8703231900"
     assert result.country_code == "CN"
     assert len(result.measures) == 1
     measure = result.measures[0]
@@ -120,6 +120,29 @@ def test_parse_measures_response() -> None:
     assert measure.validity_start_date == "2024-01-01"
     assert measure.additional_code is not None
     assert measure.additional_code.code == "A123"
+
+
+def test_normalizes_goods_code_and_language_for_real_requests() -> None:
+    client = TaricClient(use_mock=False, fallback_to_mock=False)
+    captured = {}
+
+    def fake_request(body: str) -> str:
+        captured["body"] = body
+        return DESCRIPTION_XML
+
+    client._make_soap_request = fake_request  # type: ignore[method-assign]
+    result = client.get_goods_description("87032319", language_code="EN")
+
+    assert result.goods_code == "8703231900"
+    assert "<ns:goodsCode>8703231900</ns:goodsCode>" in captured["body"]
+    assert "<ns:languageCode>en</ns:languageCode>" in captured["body"]
+
+
+def test_rejects_invalid_language_code() -> None:
+    client = TaricClient(use_mock=False, fallback_to_mock=False)
+
+    with pytest.raises(TaricAPIError, match="语言代码必须是 2 位字母"):
+        client.get_goods_description("87032319", language_code="english")
 
 
 def test_get_goods_description_raises_when_api_fails() -> None:

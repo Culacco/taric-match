@@ -3,12 +3,21 @@
 
 import sys
 
+import click
+
 from taric_match.cli import main as cli_main
 
 
 def main() -> int:
     """模块入口，供 `python -m taric_match.main` 使用。"""
-    cli_main(standalone_mode=False)
+    try:
+        cli_main(standalone_mode=False)
+    except click.ClickException as exc:
+        exc.show()
+        return exc.exit_code
+    except click.Abort:
+        click.echo("Aborted!", err=True)
+        return 1
     return 0
 
 
