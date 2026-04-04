@@ -22,12 +22,24 @@ cd taric-match
 pip install -e .
 ```
 
+开发环境也可以使用 Poetry:
+
+```bash
+poetry install --with dev
+```
+
 ## 使用方法
 
 ### 单条查询
 
 ```bash
 taric-match query 87032319 --country CN
+```
+
+如果 TARIC 官方接口暂时不可用，但你想先本地演示 CLI：
+
+```bash
+TARIC_USE_MOCK=true taric-match query 87032319 --country CN
 ```
 
 输出示例:
@@ -87,14 +99,15 @@ taric-match batch products.xlsx -o results.xlsx --column 商品编码
 
 ```bash
 # 安装开发依赖
-pip install -e ".[dev]"
+poetry install --with dev
 
 # 运行测试
-pytest
+poetry run pytest
 
 # 代码检查
-black taric_match tests
-mypy taric_match
+poetry run black --check taric_match tests
+poetry run isort --check taric_match tests
+poetry run mypy taric_match
 ```
 
 ## 贡献
